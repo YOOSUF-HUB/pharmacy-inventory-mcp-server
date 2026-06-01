@@ -723,3 +723,13 @@ The MCP server controls what is actually allowed.
 - Deploy as a remote MCP server
 
 ---
+
+## Demo Workflow
+
+1. User prompts Claude Desktop
+2. Claude calls MCP tool
+3. MCP server queries/updates SQLite
+4. Audit log records the action
+5. Claude explains the result
+
+---
