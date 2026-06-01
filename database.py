@@ -70,5 +70,22 @@ def init_database() -> None:
                 """,
                 SEED_ITEMS,
             )
+        
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action TEXT NOT NULL,
+                item_id INTEGER,
+                item_name TEXT,
+                old_value TEXT,
+                new_value TEXT,
+                details TEXT,
+                performed_by TEXT DEFAULT 'Claude Desktop / MCP Client',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (item_id) REFERENCES inventory_items(id)
+            );
+            """
+        )
 
         connection.commit()

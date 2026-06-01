@@ -136,42 +136,71 @@ def get_expired_items() -> list[dict[str, Any]]:
 
 @mcp.tool()
 def update_stock(item_id: int, new_quantity: int) -> dict[str, Any]:
-    """Update the stock quantity for one inventory item by item ID."""
+    """Update the stock quantity for a specific inventory item and record an audit log."""
     if item_id <= 0:
-        return {"status": "error", "message": "item_id must be greater than 0."}
+        return {"error": "Item ID must be a positive number."}
 
     if new_quantity < 0:
-        return {"status": "error", "message": "new_quantity cannot be negative."}
+        return {"error": "Stock quantity cannot be negative."}
 
     with get_connection() as connection:
-        row = connection.execute(
-            "SELECT * FROM inventory_items WHERE id = ?;",
+        item = connection.execute(
+            """
+            SELECT *
+            FROM inventory_items
+            WHERE id = ?;
+            """,
             (item_id,),
         ).fetchone()
 
-        if row is None:
-            return {"status": "error", "message": f"No item found with id {item_id}."}
+        if item is None:
+            return {"error": f"No inventory item found with ID {item_id}."}
+
+        old_quantity = item["quantity_in_stock"]
+        item_name = item["name"]
 
         connection.execute(
             """
             UPDATE inventory_items
-            SET quantity_in_stock = ?, updated_at = CURRENT_TIMESTAMP
+            SET quantity_in_stock = ?,
+                updated_at = CURRENT_TIMESTAMP
             WHERE id = ?;
             """,
             (new_quantity, item_id),
         )
+
+        create_audit_log(
+            connection=connection,
+            action="UPDATE_STOCK",
+            item_id=item_id,
+            item_name=item_name,
+            old_value=str(old_quantity),
+            new_value=str(new_quantity),
+            details=f"Stock quantity changed from {old_quantity} to {new_quantity}.",
+        )
+
         connection.commit()
 
-        updated_row = connection.execute(
-            "SELECT * FROM inventory_items WHERE id = ?;",
+        updated_item = connection.execute(
+            """
+            SELECT *
+            FROM inventory_items
+            WHERE id = ?;
+            """,
             (item_id,),
         ).fetchone()
 
-    return {
-        "status": "success",
-        "message": "Stock updated successfully.",
-        "item": enrich_item(row_to_dict(updated_row)),
-    }
+        return {
+            "message": "Stock updated successfully and audit log recorded.",
+            "updated_item": row_to_dict(updated_item),
+            "audit": {
+                "action": "UPDATE_STOCK",
+                "item_id": item_id,
+                "item_name": item_name,
+                "old_quantity": old_quantity,
+                "new_quantity": new_quantity,
+            },
+        }
 
 
 @mcp.tool()
@@ -182,21 +211,34 @@ def add_inventory_item(
     reorder_level: int,
     supplier: str,
     unit_price: float,
-    manufacture_date: str = "",
-    expiry_date: str = "",
+    manufacture_date: str,
+    expiry_date: str,
 ) -> dict[str, Any]:
-    """Add a new item to the inventory database."""
-    clean_name = name.strip()
-    clean_category = category.strip()
-    clean_supplier = supplier.strip()
-    clean_manufacture_date = manufacture_date.strip() or None
-    clean_expiry_date = expiry_date.strip() or None
+    """Add a new inventory item and record an audit log."""
+    name = name.strip()
+    category = category.strip()
+    supplier = supplier.strip()
 
-    if not clean_name or not clean_category or not clean_supplier:
-        return {"status": "error", "message": "name, category, and supplier are required."}
+    if not name:
+        return {"error": "Item name cannot be empty."}
 
-    if quantity_in_stock < 0 or reorder_level < 0 or unit_price < 0:
-        return {"status": "error", "message": "quantity, reorder level, and unit price cannot be negative."}
+    if not category:
+        return {"error": "Category cannot be empty."}
+
+    if not supplier:
+        return {"error": "Supplier cannot be empty."}
+
+    if quantity_in_stock < 0:
+        return {"error": "Stock quantity cannot be negative."}
+
+    if reorder_level < 0:
+        return {"error": "Reorder level cannot be negative."}
+
+    if unit_price < 0:
+        return {"error": "Unit price cannot be negative."}
+
+    if manufacture_date > expiry_date:
+        return {"error": "Expiry date must be after manufacture date."}
 
     with get_connection() as connection:
         cursor = connection.execute(
@@ -214,29 +256,50 @@ def add_inventory_item(
             VALUES (?, ?, ?, ?, ?, ?, ?, ?);
             """,
             (
-                clean_name,
-                clean_category,
+                name,
+                category,
                 quantity_in_stock,
                 reorder_level,
-                clean_supplier,
-                clean_manufacture_date,
-                clean_expiry_date,
+                supplier,
+                manufacture_date,
+                expiry_date,
                 unit_price,
             ),
         )
+
+        new_item_id = cursor.lastrowid
+
+        create_audit_log(
+            connection=connection,
+            action="ADD_ITEM",
+            item_id=new_item_id,
+            item_name=name,
+            old_value=None,
+            new_value=str(quantity_in_stock),
+            details=f"New inventory item added with initial stock quantity {quantity_in_stock}.",
+        )
+
         connection.commit()
 
-        new_id = cursor.lastrowid
-        row = connection.execute(
-            "SELECT * FROM inventory_items WHERE id = ?;",
-            (new_id,),
+        new_item = connection.execute(
+            """
+            SELECT *
+            FROM inventory_items
+            WHERE id = ?;
+            """,
+            (new_item_id,),
         ).fetchone()
 
-    return {
-        "status": "success",
-        "message": "Inventory item added successfully.",
-        "item": enrich_item(row_to_dict(row)),
-    }
+        return {
+            "message": "Inventory item added successfully and audit log recorded.",
+            "item": row_to_dict(new_item),
+            "audit": {
+                "action": "ADD_ITEM",
+                "item_id": new_item_id,
+                "item_name": name,
+                "initial_quantity": quantity_in_stock,
+            },
+        }
 
 
 @mcp.tool()
@@ -255,6 +318,94 @@ def get_inventory_summary() -> dict[str, Any]:
         ).fetchone()
 
     return row_to_dict(row)
+
+
+def create_audit_log(
+    connection: sqlite3.Connection,
+    action: str,
+    item_id: int | None = None,
+    item_name: str | None = None,
+    old_value: str | None = None,
+    new_value: str | None = None,
+    details: str | None = None,
+    performed_by: str = "Claude Desktop / MCP Client",
+) -> None:
+    """Insert an audit log entry for important inventory actions."""
+    connection.execute(
+        """
+        INSERT INTO audit_logs (
+            action,
+            item_id,
+            item_name,
+            old_value,
+            new_value,
+            details,
+            performed_by
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?);
+        """,
+        (
+            action,
+            item_id,
+            item_name,
+            old_value,
+            new_value,
+            details,
+            performed_by,
+        ),
+    )
+
+@mcp.tool()
+def get_audit_logs(limit: int = 10) -> list[dict[str, Any]]:
+    """Return the latest audit log entries."""
+    if limit <= 0:
+        limit = 10
+
+    if limit > 100:
+        limit = 100
+
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM audit_logs
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?;
+            """,
+            (limit,),
+        ).fetchall()
+
+        return [row_to_dict(row) for row in rows]
+
+
+@mcp.tool()
+def get_audit_logs_for_item(item_id: int) -> list[dict[str, Any]]:
+    """Return audit logs for a specific inventory item."""
+    if item_id <= 0:
+        return [{"error": "Item ID must be a positive number."}]
+
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT *
+            FROM audit_logs
+            WHERE item_id = ?
+            ORDER BY created_at DESC, id DESC;
+            """,
+            (item_id,),
+        ).fetchall()
+
+        return [row_to_dict(row) for row in rows]
+
+
+@mcp.tool()
+def get_database_path() -> dict[str, str]:
+    """Return the absolute SQLite database path used by this MCP server."""
+    return {
+        "database_path": str(DB_PATH),
+        "server_path": str(Path(__file__).resolve()),
+    }
+
 
 
 if __name__ == "__main__":
