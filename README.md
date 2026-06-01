@@ -297,18 +297,6 @@ Your terminal prompt should show something like:
 (pharmacy_mcp) yoosufahamed@Yoosufs-MacBook-Air pharmacy-mcp-server-sqlite %
 ```
 
-If you see this:
-
-```text
-(pharmacy_mcp) (base)
-```
-
-it means Anaconda base is also active. You can disable it for the current session using:
-
-```bash
-conda deactivate
-```
-
 ### 4. Install dependencies
 
 ```bash
@@ -428,7 +416,7 @@ which python
 Example output:
 
 ```text
-/Users/yoosufahamed/Desktop/Projects/pharmacy_mcp_sever Project/pharmacy-mcp-server-sqlite/pharmacy_mcp/bin/python
+/Users/name/Desktop/Projects/pharmacy_mcp_sever Project/pharmacy-mcp-server-sqlite/pharmacy_mcp/bin/python
 ```
 
 ### 2. Get your project path
@@ -442,13 +430,13 @@ pwd
 Example output:
 
 ```text
-/Users/yoosufahamed/Desktop/Projects/pharmacy_mcp_sever Project/pharmacy-mcp-server-sqlite
+/Users/name/Desktop/Projects/pharmacy_mcp_sever Project/pharmacy-mcp-server-sqlite
 ```
 
 Your `server.py` path will be:
 
 ```text
-/Users/yoosufahamed/Desktop/Projects/pharmacy_mcp_sever Project/pharmacy-mcp-server-sqlite/server.py
+/Users/name/Desktop/Projects/pharmacy_mcp_sever Project/pharmacy-mcp-server-sqlite/server.py
 ```
 
 ---
@@ -485,9 +473,9 @@ Example:
   },
   "mcpServers": {
     "pharmacy-inventory": {
-      "command": "/Users/yoosufahamed/Desktop/Projects/pharmacy_mcp_sever Project/pharmacy-mcp-server-sqlite/pharmacy_mcp/bin/python",
+      "command": "/Users/name/Desktop/Projects/pharmacy_mcp_sever Project/pharmacy-mcp-server-sqlite/pharmacy_mcp/bin/python",
       "args": [
-        "/Users/yoosufahamed/Desktop/Projects/pharmacy_mcp_sever Project/pharmacy-mcp-server-sqlite/server.py"
+        "/Users/name/Desktop/Projects/pharmacy_mcp_sever Project/pharmacy-mcp-server-sqlite/server.py"
       ]
     }
   }
@@ -666,7 +654,7 @@ Fix:
 1. Validate the config file format.
 2. Confirm the Python path with `which python`.
 3. Confirm the project path with `pwd`.
-4. Fully quit Claude Desktop using `Command + Q`.
+4. Fully quit Claude Desktop.
 5. Reopen Claude Desktop.
 
 ---
@@ -690,18 +678,6 @@ Correct structure:
       ]
     }
   }
-}
-```
-
-Incorrect structure:
-
-```json
-{
-  "preferences": {}
-}
-
-{
-  "mcpServers": {}
 }
 ```
 
